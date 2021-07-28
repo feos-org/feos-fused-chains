@@ -257,8 +257,19 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
         let n1 = weighted_densities.index_axis(Axis(0), 1);
         let n2 = weighted_densities.index_axis(Axis(0), 2);
         let n3 = weighted_densities.index_axis(Axis(0), 3);
-        let n1v = weighted_densities.slice_axis(Axis(0), Slice::new(4, Some(4 + dim), 1));
-        let n2v = weighted_densities.slice_axis(Axis(0), Slice::new(4 + dim, Some(4 + 2 * dim), 1));
+
+        let (n1n2, n2n2) = match self.version {
+            FMTVersion::WhiteBear => {
+                let n1v = weighted_densities.slice_axis(Axis(0), Slice::new(4, Some(4 + dim), 1));
+                let n2v = weighted_densities
+                    .slice_axis(Axis(0), Slice::new(4 + dim, Some(4 + 2 * dim), 1));
+                (
+                    &n1 * &n2 - (&n1v * &n2v).sum_axis(Axis(0)),
+                    &n2 * &n2 - (&n2v * &n2v).sum_axis(Axis(0)) * 3.0,
+                )
+            }
+            FMTVersion::KierlikRosinberg => (&n1 * &n2, &n2 * &n2),
+        };
 
         // auxiliary variables
         let ln31 = n3.mapv(|n3| (-n3).ln_1p());
@@ -266,7 +277,6 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
         let n3m1 = n3.mapv(|n3| -n3 + 1.0);
         let n3m1rec = n3m1.mapv(|n3m1| n3m1.recip());
 
-        // White-Bear FMT
         // use Taylor expansion for f3 at low densities to avoid numerical issues
         let mut f3 = (&n3m1 * &n3m1 * &ln31 + &n3) * &n3rec * n3rec * &n3m1rec * &n3m1rec;
         f3.iter_mut().zip(n3).for_each(|(f3, &n3)| {
@@ -274,9 +284,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                 *f3 = (((n3 * 35.0 / 6.0 + 4.8) * n3 + 3.75) * n3 + 8.0 / 3.0) * n3 + 1.5;
             }
         });
-        Ok(-(&n0 * &ln31)
-            + (&n1 * &n2 - (&n1v * &n2v).sum_axis(Axis(0))) * &n3m1rec
-            + (&n2 * &n2 - (&n2v * &n2v).sum_axis(Axis(0)) * 3.0) * &n2 * PI36M1 * f3)
+        Ok(-(&n0 * &ln31) + n1n2 * &n3m1rec + n2n2 * &n2 * PI36M1 * f3)
     }
 }
 
