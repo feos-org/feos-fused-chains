@@ -22,6 +22,47 @@ pub struct PyFusedChainFunctional {
 
 #[pymethods]
 impl PyFusedChainFunctional {
+    /// New functional for fused trimers.
+    ///
+    /// Parameters
+    /// ----------
+    /// sigma1: float
+    ///     Diameter of the first segment.
+    /// sigma2: float
+    ///     Diameter of the second segment.
+    /// sigma3: float
+    ///     Diameter of the third segment.
+    /// distance1: float
+    ///     Distance between the centers of the first segments.
+    /// distance2: float
+    ///     Distance between the centers of the last segments.
+    ///
+    /// Returns
+    /// -------
+    /// FusedChainFunctional
+    #[staticmethod]
+    #[pyo3(text_signature = "(sigma1, sigma2, sigma3, distance1, distance2)")]
+    fn new_trimer(
+        sigma1: f64,
+        sigma2: f64,
+        sigma3: f64,
+        distance1: f64,
+        distance2: f64,
+        kierlik_rosinberg: Option<bool>,
+    ) -> Self {
+        let mut version = FMTVersion::WhiteBear;
+        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
+            if kierlik_rosinberg {
+                version = FMTVersion::KierlikRosinberg;
+            }
+        }
+        Self {
+            _data: Rc::new(FusedChainFunctional::new_trimer(
+                sigma1, sigma2, sigma3, distance1, distance2, version,
+            )),
+        }
+    }
+
     /// New functional for fused dimers.
     ///
     /// Parameters

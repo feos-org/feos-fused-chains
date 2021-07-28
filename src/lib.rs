@@ -43,65 +43,75 @@ pub struct FusedChainFunctional {
     max_eta: f64,
 }
 
-fn m_v(sigma1: f64, sigma2: f64, distance: f64) -> f64 {
-    1.0 - 1.0 / (256.0 * (sigma1 * distance).powi(3))
-        * (sigma2.powi(2) - sigma1.powi(2) - 4.0 * distance.powi(2) + 4.0 * distance * sigma1)
-            .powi(2)
-        * (sigma1.powi(2) - sigma2.powi(2) + 4.0 * distance.powi(2) + 8.0 * distance * sigma1)
-}
-
-fn m_a(sigma1: f64, sigma2: f64, distance: f64) -> f64 {
-    (sigma1.powi(2) - sigma2.powi(2) + 4.0 * distance.powi(2) + 4.0 * distance * sigma1)
-        / (8.0 * distance * sigma1)
-}
-
 impl FusedChainFunctional {
-    pub fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, version: FMTVersion) -> DFT<Self> {
-        let n_segments = arr1(&[2]);
-        let m_v = arr1(&[m_v(sigma1, sigma2, distance), m_v(sigma2, sigma1, distance)]);
-        let m_a = arr1(&[m_a(sigma1, sigma2, distance), m_a(sigma2, sigma1, distance)]);
+    fn new(sigma: Array1<f64>, distance: Array1<f64>, version: FMTVersion) -> DFT<Self> {
+        let n = sigma.len();
+        let b = Array1::from_shape_fn(n, |i| {
+            if i == n - 1 {
+                0.5 * sigma[i]
+            } else {
+                (sigma[i].powi(2) - sigma[i + 1].powi(2) + 4.0 * distance[i].powi(2))
+                    / (8.0 * distance[i])
+            }
+        });
+        let a = Array1::from_shape_fn(n, |i| {
+            if i == 0 {
+                0.5 * sigma[i]
+            } else {
+                (sigma[i].powi(2) - sigma[i - 1].powi(2) + 4.0 * distance[i - 1].powi(2))
+                    / (8.0 * distance[i - 1])
+            }
+        });
+        let sigma2 = &sigma * &sigma;
+        let sigma3 = &sigma2 * &sigma;
+        let m_v = (3.0 * sigma2 * (&a + &b) - 4.0 * (&a * &a * &a + &b * &b * &b)) / (2.0 * sigma3);
+        let m_a = (a + b) / &sigma;
+        let m = [Array1::ones(n), m_a.clone(), m_a, m_v];
+
+        let n_segments = arr1(&[n]);
         let parameters = Rc::new(FusedChainParameters {
             n_segments: n_segments.clone(),
-            sigma: arr1(&[sigma1, sigma2]),
-            m: [Array1::ones(2), m_a.clone(), m_a.clone(), m_v],
-            distance: arr1(&[distance]),
+            sigma,
+            m,
+            distance,
         });
         let mut contributions: Vec<Box<dyn FunctionalContribution>> = Vec::with_capacity(2);
         contributions.push(Box::new(FMTFunctional::new(&parameters, version)));
-        contributions.push(Box::new(FusedSegmentChainFunctional::new(&parameters)));
+        if n > 1 {
+            contributions.push(Box::new(FusedSegmentChainFunctional::new(&parameters)));
+        }
         DFT::new(
             Self {
                 parameters,
                 contributions,
                 max_eta: 0.5,
             },
-            &Array::ones(m_a.len()),
+            &Array::ones(n),
             &n_segments,
         )
     }
 
-    pub fn new_monomer(sigma: f64, version: FMTVersion) -> DFT<Self> {
-        let n_segments = arr1(&[1]);
-        let m_v = arr1(&[1.0]);
-        let m_a = arr1(&[1.0]);
-        let parameters = Rc::new(FusedChainParameters {
-            n_segments: n_segments.clone(),
-            sigma: arr1(&[sigma]),
-            m: [Array1::ones(1), m_a.clone(), m_a.clone(), m_v],
-            distance: arr1(&[]),
-        });
-        let mut contributions: Vec<Box<dyn FunctionalContribution>> = Vec::with_capacity(2);
-        contributions.push(Box::new(FMTFunctional::new(&parameters, version)));
-        contributions.push(Box::new(FusedSegmentChainFunctional::new(&parameters)));
-        DFT::new(
-            Self {
-                parameters,
-                contributions,
-                max_eta: 0.5,
-            },
-            &Array::ones(m_a.len()),
-            &n_segments,
+    pub fn new_trimer(
+        sigma1: f64,
+        sigma2: f64,
+        sigma3: f64,
+        distance1: f64,
+        distance2: f64,
+        version: FMTVersion,
+    ) -> DFT<Self> {
+        Self::new(
+            arr1(&[sigma1, sigma2, sigma3]),
+            arr1(&[distance1, distance2]),
+            version,
         )
+    }
+
+    pub fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, version: FMTVersion) -> DFT<Self> {
+        Self::new(arr1(&[sigma1, sigma2]), arr1(&[distance]), version)
+    }
+
+    pub fn new_monomer(sigma: f64, version: FMTVersion) -> DFT<Self> {
+        Self::new(arr1(&[sigma]), arr1(&[]), version)
     }
 }
 
@@ -205,7 +215,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                     )
                     .add(
                         WeightFunction {
-                            prefactor: Zip::from(&self.parameters.m[0])
+                            prefactor: Zip::from(&self.parameters.m[3])
                                 .and(&r)
                                 .map_collect(|&m, &r| r.recip() * m / (4.0 * PI)),
                             kernel_radius: r.clone(),
@@ -215,7 +225,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                     )
                     .add(
                         WeightFunction {
-                            prefactor: self.parameters.m[0].mapv(N::from),
+                            prefactor: self.parameters.m[3].mapv(N::from),
                             kernel_radius: r.clone(),
                             shape: WeightFunctionShape::DeltaVec,
                         },
