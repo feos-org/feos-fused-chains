@@ -1,0 +1,30 @@
+[package]
+name = "fused-chain"
+version = "0.1.0"
+authors = ["Philipp Rehner <rehner@itt.uni-stuttgart.de>"]
+edition = "2018"
+
+[lib]
+name = "fused_chain"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+quantity = { version = "0.2", features = ["python"] }
+eos-core = { path = "../../../Code/eos/eos-core", features = ["python"] }
+eos-dft = { path = "../../../Code/eos/eos-dft", features = ["python"] }
+num-dual = "0.2"
+ndarray = { version = "0.15", features = ["serde"] }
+numpy = "0.14"
+
+[dependencies.pyo3]
+version = "0.14"
+features = ["extension-module", "abi3", "abi3-py36"]
+
+[features]
+default = ["openblas-system"]
+openblas-system = ["eos-core/openblas-system"]
+openblas-static = ["eos-core/openblas-static"]
+intel-mkl-system = ["eos-core/intel-mkl-system"]
+intel-mkl-static = ["eos-core/intel-mkl-static"]
+netlib-system = ["eos-core/netlib-system"]
+netlib-static = ["eos-core/netlib-static"]
