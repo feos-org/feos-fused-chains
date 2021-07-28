@@ -33,7 +33,7 @@ impl FluidParameters for FusedChainParameters {
     }
 
     fn m(&self) -> Array1<f64> {
-        unreachable!()
+        self.m[3].clone()
     }
 }
 
