@@ -3,6 +3,7 @@ use ::quantity::pyquantity::*;
 use eos_core::python::{PyContributions, PyVerbosity};
 use eos_core::*;
 use eos_dft::adsorption::*;
+use eos_dft::fundamental_measure_theory::FMTVersion;
 use eos_dft::python::*;
 use eos_dft::*;
 use numpy::{PyArray1, PyArray2, ToPyArray};
@@ -37,9 +38,17 @@ impl PyFusedChainFunctional {
     /// FusedChainFunctional
     #[staticmethod]
     #[pyo3(text_signature = "(sigma1, sigma2, distance)")]
-    fn new_dimer(sigma1: f64, sigma2: f64, distance: f64) -> Self {
+    fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, kierlik_rosinberg: Option<bool>) -> Self {
+        let mut version = FMTVersion::WhiteBear;
+        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
+            if kierlik_rosinberg {
+                version = FMTVersion::KierlikRosinberg;
+            }
+        }
         Self {
-            _data: Rc::new(FusedChainFunctional::new_dimer(sigma1, sigma2, distance)),
+            _data: Rc::new(FusedChainFunctional::new_dimer(
+                sigma1, sigma2, distance, version,
+            )),
         }
     }
 
@@ -55,9 +64,15 @@ impl PyFusedChainFunctional {
     /// FusedChainFunctional
     #[staticmethod]
     #[pyo3(text_signature = "(sigma)")]
-    fn new_monomer(sigma: f64) -> Self {
+    fn new_monomer(sigma: f64, kierlik_rosinberg: Option<bool>) -> Self {
+        let mut version = FMTVersion::WhiteBear;
+        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
+            if kierlik_rosinberg {
+                version = FMTVersion::KierlikRosinberg;
+            }
+        }
         Self {
-            _data: Rc::new(FusedChainFunctional::new_monomer(sigma)),
+            _data: Rc::new(FusedChainFunctional::new_monomer(sigma, version)),
         }
     }
 }
