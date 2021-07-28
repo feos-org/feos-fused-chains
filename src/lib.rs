@@ -205,7 +205,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                     )
                     .add(
                         WeightFunction {
-                            prefactor: Zip::from(&self.parameters.m[3])
+                            prefactor: Zip::from(&self.parameters.m[0])
                                 .and(&r)
                                 .map_collect(|&m, &r| r.recip() * m / (4.0 * PI)),
                             kernel_radius: r.clone(),
@@ -215,7 +215,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                     )
                     .add(
                         WeightFunction {
-                            prefactor: self.parameters.m[3].mapv(N::from),
+                            prefactor: self.parameters.m[0].mapv(N::from),
                             kernel_radius: r.clone(),
                             shape: WeightFunctionShape::DeltaVec,
                         },
