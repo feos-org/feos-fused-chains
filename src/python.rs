@@ -22,6 +22,60 @@ pub struct PyFusedChainFunctional {
 
 #[pymethods]
 impl PyFusedChainFunctional {
+    /// New functional for monomers.
+    ///
+    /// Parameters
+    /// ----------
+    /// sigma: float
+    ///     Diameter of the monomer.
+    ///
+    /// Returns
+    /// -------
+    /// FusedChainFunctional
+    #[staticmethod]
+    #[pyo3(text_signature = "(sigma)")]
+    fn new_monomer(sigma: f64, kierlik_rosinberg: Option<bool>) -> Self {
+        let mut version = FMTVersion::WhiteBear;
+        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
+            if kierlik_rosinberg {
+                version = FMTVersion::KierlikRosinberg;
+            }
+        }
+        Self {
+            _data: Rc::new(FusedChainFunctional::new_monomer(sigma, version)),
+        }
+    }
+
+    /// New functional for fused dimers.
+    ///
+    /// Parameters
+    /// ----------
+    /// sigma1: float
+    ///     Diameter of the first segment.
+    /// sigma2: float
+    ///     Diameter of the second segment.
+    /// distance: float
+    ///     Distance between the centers of the two segments.
+    ///
+    /// Returns
+    /// -------
+    /// FusedChainFunctional
+    #[staticmethod]
+    #[pyo3(text_signature = "(sigma1, sigma2, distance)")]
+    fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, kierlik_rosinberg: Option<bool>) -> Self {
+        let mut version = FMTVersion::WhiteBear;
+        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
+            if kierlik_rosinberg {
+                version = FMTVersion::KierlikRosinberg;
+            }
+        }
+        Self {
+            _data: Rc::new(FusedChainFunctional::new_dimer(
+                sigma1, sigma2, distance, version,
+            )),
+        }
+    }
+
     /// New functional for fused trimers.
     ///
     /// Parameters
@@ -63,49 +117,28 @@ impl PyFusedChainFunctional {
         }
     }
 
-    /// New functional for fused dimers.
+    /// New functional for fused homosegmented chains.
     ///
     /// Parameters
     /// ----------
-    /// sigma1: float
-    ///     Diameter of the first segment.
-    /// sigma2: float
-    ///     Diameter of the second segment.
-    /// distance: float
-    ///     Distance between the centers of the two segments.
-    ///
-    /// Returns
-    /// -------
-    /// FusedChainFunctional
-    #[staticmethod]
-    #[pyo3(text_signature = "(sigma1, sigma2, distance)")]
-    fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, kierlik_rosinberg: Option<bool>) -> Self {
-        let mut version = FMTVersion::WhiteBear;
-        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
-            if kierlik_rosinberg {
-                version = FMTVersion::KierlikRosinberg;
-            }
-        }
-        Self {
-            _data: Rc::new(FusedChainFunctional::new_dimer(
-                sigma1, sigma2, distance, version,
-            )),
-        }
-    }
-
-    /// New functional for monomers.
-    ///
-    /// Parameters
-    /// ----------
+    /// segments: int
+    ///     NUmber of segments on the chain.
     /// sigma: float
-    ///     Diameter of the monomer.
+    ///     Diameter of the first segment.
+    /// distance: float
+    ///     Distance between the centers of the first segments.
     ///
     /// Returns
     /// -------
     /// FusedChainFunctional
     #[staticmethod]
-    #[pyo3(text_signature = "(sigma)")]
-    fn new_monomer(sigma: f64, kierlik_rosinberg: Option<bool>) -> Self {
+    #[pyo3(text_signature = "(segments, sigma, distance)")]
+    fn new_homosegmented(
+        segments: usize,
+        sigma: f64,
+        distance: f64,
+        kierlik_rosinberg: Option<bool>,
+    ) -> Self {
         let mut version = FMTVersion::WhiteBear;
         if let Some(kierlik_rosinberg) = kierlik_rosinberg {
             if kierlik_rosinberg {
@@ -113,7 +146,9 @@ impl PyFusedChainFunctional {
             }
         }
         Self {
-            _data: Rc::new(FusedChainFunctional::new_monomer(sigma, version)),
+            _data: Rc::new(FusedChainFunctional::new_homosegmented(
+                segments, sigma, distance, version,
+            )),
         }
     }
 
@@ -134,7 +169,6 @@ impl PyFusedChainFunctional {
             _data: self._data.max_density(m)?,
         })
     }
-
 }
 
 impl_state!(DFT<FusedChainFunctional>, PyFusedChainFunctional);

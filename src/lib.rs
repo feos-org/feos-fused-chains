@@ -91,6 +91,14 @@ impl FusedChainFunctional {
         )
     }
 
+    pub fn new_monomer(sigma: f64, version: FMTVersion) -> DFT<Self> {
+        Self::new(arr1(&[sigma]), arr1(&[]), version)
+    }
+
+    pub fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, version: FMTVersion) -> DFT<Self> {
+        Self::new(arr1(&[sigma1, sigma2]), arr1(&[distance]), version)
+    }
+
     pub fn new_trimer(
         sigma1: f64,
         sigma2: f64,
@@ -106,12 +114,17 @@ impl FusedChainFunctional {
         )
     }
 
-    pub fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, version: FMTVersion) -> DFT<Self> {
-        Self::new(arr1(&[sigma1, sigma2]), arr1(&[distance]), version)
-    }
-
-    pub fn new_monomer(sigma: f64, version: FMTVersion) -> DFT<Self> {
-        Self::new(arr1(&[sigma]), arr1(&[]), version)
+    pub fn new_homosegmented(
+        segments: usize,
+        sigma: f64,
+        distance: f64,
+        version: FMTVersion,
+    ) -> DFT<Self> {
+        Self::new(
+            Array1::from_elem(segments, sigma),
+            Array1::from_elem(segments - 1, distance),
+            version,
+        )
     }
 }
 
