@@ -1,3 +1,4 @@
+#![warn(clippy::all)]
 use eos_core::EosResult;
 use eos_dft::adsorption::FluidParameters;
 use eos_dft::fundamental_measure_theory::FMTVersion;
@@ -301,13 +302,13 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
         let n3m1rec = n3m1.mapv(|n3m1| n3m1.recip());
 
         // use Taylor expansion for f3 at low densities to avoid numerical issues
-        let mut f3 = (&n3m1 * &n3m1 * &ln31 + &n3) * &n3rec * n3rec * &n3m1rec * &n3m1rec;
+        let mut f3 = (&n3m1 * &n3m1 * &ln31 + n3) * &n3rec * n3rec * &n3m1rec * &n3m1rec;
         f3.iter_mut().zip(n3).for_each(|(f3, &n3)| {
             if n3.re() < N3_CUTOFF {
                 *f3 = (((n3 * 35.0 / 6.0 + 4.8) * n3 + 3.75) * n3 + 8.0 / 3.0) * n3 + 1.5;
             }
         });
-        Ok(-(&n0 * &ln31) + n1n2 * &n3m1rec + n2n2 * &n2 * PI36M1 * f3)
+        Ok(-(&n0 * &ln31) + n1n2 * &n3m1rec + n2n2 * n2 * PI36M1 * f3)
     }
 }
 
@@ -381,14 +382,15 @@ impl<N: DualNum<f64> + ScalarOperand> FunctionalContributionDual<N>
         for ns in self.parameters.n_segments.iter() {
             for _ in 0..ns - 1 {
                 // cavity correlation
-                let mij = 0.5 * (p.m[1][j] + p.m[1][j + 1]);
                 let dij = p.sigma[j] * p.sigma[j + 1] / (p.sigma[j] + p.sigma[j + 1]);
                 let z2d = zeta2.mapv(|z2| z2 * dij);
                 let yi = &z2d * &z3i * &z3i * (z2d * &z3i * 2.0 + 3.0) + &z3i;
 
                 // Helmholtz energy density
-                let rhom = (&rho.index_axis(Axis(0), j) + &rho.index_axis(Axis(0), j + 1)) * 0.5;
-                phi = phi - yi.map(N::ln) * rhom * mij;
+                let rhom = (&rho.index_axis(Axis(0), j) * p.m[1][j]
+                    + &rho.index_axis(Axis(0), j + 1) * p.m[1][j + 1])
+                    * 0.5;
+                phi = phi - yi.map(N::ln) * rhom;
                 j += 1;
             }
             j += 1

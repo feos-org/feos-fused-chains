@@ -186,6 +186,7 @@ pub fn fused_chain(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyExternalPotential>()?;
     m.add_class::<PyAdsorption>()?;
     m.add_class::<PyDFTSolver>()?;
+    m.add_class::<PyContributions>()?;
 
     py.run(
         "import sys; sys.modules['fused_chain.si'] = quantity",
