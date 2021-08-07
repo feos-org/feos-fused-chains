@@ -116,6 +116,25 @@ impl PyFusedChainFunctional {
             _data: Rc::new(FusedChainFunctional::new_monomer(sigma, version)),
         }
     }
+
+    /// Return maximum density for given amount of substance of each component.
+    ///
+    /// Parameters
+    /// ----------
+    /// moles : SIArray1, optional
+    ///     The amount of substance in mol for each component.
+    ///
+    /// Returns
+    /// -------
+    /// SINumber
+    #[pyo3(text_signature = "(moles=None)")]
+    fn max_density(&self, moles: Option<&PySIArray1>) -> PyResult<PySINumber> {
+        let m = moles.map(|a| &a._data);
+        Ok(PySINumber {
+            _data: self._data.max_density(m)?,
+        })
+    }
+
 }
 
 impl_state!(DFT<FusedChainFunctional>, PyFusedChainFunctional);
