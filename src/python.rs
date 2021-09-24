@@ -1,5 +1,5 @@
 use crate::FusedChainFunctional;
-use ::quantity::pyquantity::*;
+use ::quantity::python::*;
 use eos_core::python::{PyContributions, PyVerbosity};
 use eos_core::*;
 use eos_dft::adsorption::*;
@@ -16,9 +16,7 @@ use std::rc::Rc;
 /// Helmholtz energy functional for fused chains.
 #[pyclass(name = "FusedChainFunctional", unsendable)]
 #[derive(Clone)]
-pub struct PyFusedChainFunctional {
-    pub _data: Rc<DFT<FusedChainFunctional>>,
-}
+pub struct PyFusedChainFunctional(Rc<DFT<FusedChainFunctional>>);
 
 #[pymethods]
 impl PyFusedChainFunctional {
@@ -41,9 +39,7 @@ impl PyFusedChainFunctional {
                 version = FMTVersion::KierlikRosinberg;
             }
         }
-        Self {
-            _data: Rc::new(FusedChainFunctional::new_monomer(sigma, version)),
-        }
+        Self(Rc::new(FusedChainFunctional::new_monomer(sigma, version)))
     }
 
     /// New functional for fused dimers.
@@ -69,11 +65,9 @@ impl PyFusedChainFunctional {
                 version = FMTVersion::KierlikRosinberg;
             }
         }
-        Self {
-            _data: Rc::new(FusedChainFunctional::new_dimer(
-                sigma1, sigma2, distance, version,
-            )),
-        }
+        Self(Rc::new(FusedChainFunctional::new_dimer(
+            sigma1, sigma2, distance, version,
+        )))
     }
 
     /// New functional for fused trimers.
@@ -110,11 +104,9 @@ impl PyFusedChainFunctional {
                 version = FMTVersion::KierlikRosinberg;
             }
         }
-        Self {
-            _data: Rc::new(FusedChainFunctional::new_trimer(
-                sigma1, sigma2, sigma3, distance1, distance2, version,
-            )),
-        }
+        Self(Rc::new(FusedChainFunctional::new_trimer(
+            sigma1, sigma2, sigma3, distance1, distance2, version,
+        )))
     }
 
     /// New functional for fused homosegmented chains.
@@ -145,32 +137,13 @@ impl PyFusedChainFunctional {
                 version = FMTVersion::KierlikRosinberg;
             }
         }
-        Self {
-            _data: Rc::new(FusedChainFunctional::new_homosegmented(
-                segments, sigma, distance, version,
-            )),
-        }
-    }
-
-    /// Return maximum density for given amount of substance of each component.
-    ///
-    /// Parameters
-    /// ----------
-    /// moles : SIArray1, optional
-    ///     The amount of substance in mol for each component.
-    ///
-    /// Returns
-    /// -------
-    /// SINumber
-    #[pyo3(text_signature = "(moles=None)")]
-    fn max_density(&self, moles: Option<&PySIArray1>) -> PyResult<PySINumber> {
-        let m = moles.map(|a| &a._data);
-        Ok(PySINumber {
-            _data: self._data.max_density(m)?,
-        })
+        Self(Rc::new(FusedChainFunctional::new_homosegmented(
+            segments, sigma, distance, version,
+        )))
     }
 }
 
+impl_equation_of_state!(PyFusedChainFunctional);
 impl_state!(DFT<FusedChainFunctional>, PyFusedChainFunctional);
 
 impl_adsorption_profile!(FusedChainFunctional);

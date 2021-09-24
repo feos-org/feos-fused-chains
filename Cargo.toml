@@ -9,10 +9,10 @@ name = "fused_chain"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-quantity = { version = "0.2", features = ["python"] }
+quantity = { version = "0.3", features = ["python"] }
 eos-core = { path = "../../../Code/eos/eos-core", features = ["python"] }
 eos-dft = { path = "../../../Code/eos/eos-dft", features = ["python"] }
-num-dual = "0.2"
+num-dual = "0.3"
 ndarray = { version = "0.15", features = ["serde"] }
 numpy = "0.14"
 

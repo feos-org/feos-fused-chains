@@ -130,7 +130,7 @@ impl FusedChainFunctional {
 }
 
 impl HelmholtzEnergyFunctional for FusedChainFunctional {
-    fn get_subset(&self, _component_list: &[usize]) -> DFT<Self> {
+    fn subset(&self, _component_list: &[usize]) -> DFT<Self> {
         unimplemented!()
     }
 
