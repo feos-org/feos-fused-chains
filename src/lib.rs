@@ -1,32 +1,42 @@
 #![warn(clippy::all)]
-use eos_core::EosResult;
 use eos_dft::adsorption::FluidParameters;
 use eos_dft::fundamental_measure_theory::FMTVersion;
 use eos_dft::{
     FunctionalContribution, FunctionalContributionDual, HelmholtzEnergyFunctional, WeightFunction,
     WeightFunctionInfo, WeightFunctionShape, DFT,
 };
+use feos_core::EosResult;
 use ndarray::{arr1, Array, Array1, ArrayView2, Axis, ScalarOperand, Slice, Zip};
 use num_dual::DualNum;
+use petgraph::graph::{Graph, UnGraph};
+use petgraph::visit::EdgeRef;
+use serde::{Deserialize, Serialize};
 use std::f64::consts::{FRAC_PI_6, PI};
 use std::fmt;
 use std::rc::Rc;
 
+#[cfg(feature = "python")]
 mod python;
 
 const PI36M1: f64 = 1.0 / (36.0 * PI);
 const N3_CUTOFF: f64 = 1e-5;
 
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct FusedChainRecord {
+    sigma: f64,
+}
+
 pub struct FusedChainParameters {
-    n_segments: Array1<usize>,
     sigma: Array1<f64>,
-    m: [Array1<f64>; 4],
-    distance: Array1<f64>,
+    a: Array1<f64>,
+    v: Array1<f64>,
+    l: UnGraph<(), f64>,
+    component_index: Array1<usize>,
 }
 
 impl FluidParameters for FusedChainParameters {
-    fn epsilon_k_ff(&self) -> &Array1<f64> {
-        unreachable!()
+    fn epsilon_k_ff(&self) -> Array1<f64> {
+        Array::zeros(self.sigma.len())
     }
 
     fn sigma_ff(&self) -> &Array1<f64> {
@@ -34,7 +44,7 @@ impl FluidParameters for FusedChainParameters {
     }
 
     fn m(&self) -> Array1<f64> {
-        self.m[3].clone()
+        Array1::ones(self.sigma.len())
     }
 }
 
@@ -45,72 +55,68 @@ pub struct FusedChainFunctional {
 }
 
 impl FusedChainFunctional {
-    fn new(sigma: Array1<f64>, distance: Array1<f64>, version: FMTVersion) -> DFT<Self> {
-        let n = sigma.len();
-        let b = Array1::from_shape_fn(n, |i| {
-            if i == n - 1 {
-                0.5 * sigma[i]
-            } else {
-                (sigma[i].powi(2) - sigma[i + 1].powi(2) + 4.0 * distance[i].powi(2))
-                    / (8.0 * distance[i])
-            }
-        });
-        let a = Array1::from_shape_fn(n, |i| {
-            if i == 0 {
-                0.5 * sigma[i]
-            } else {
-                (sigma[i].powi(2) - sigma[i - 1].powi(2) + 4.0 * distance[i - 1].powi(2))
-                    / (8.0 * distance[i - 1])
-            }
-        });
-        let sigma2 = &sigma * &sigma;
-        let sigma3 = &sigma2 * &sigma;
-        let m_v = (3.0 * sigma2 * (&a + &b) - 4.0 * (&a * &a * &a + &b * &b * &b)) / (2.0 * sigma3);
-        let m_a = (a + b) / &sigma;
-        let m = [Array1::ones(n), m_a.clone(), m_a, m_v];
+    fn new(sigma: Array1<f64>, bonds: Vec<(u32, u32, f64)>, version: FMTVersion) -> DFT<Self> {
+        let segments = sigma.len();
 
-        let n_segments = arr1(&[n]);
+        let mut l = Graph::default();
+        l.extend_with_edges(bonds.into_iter());
+
+        let mut a = Array::ones(segments);
+        let mut v = Array::ones(segments);
+        for n in l.node_indices() {
+            let sigma1 = sigma[n.index()];
+            for e in l.edges(n) {
+                let sigma2 = sigma[e.target().index()];
+                let l12 = e.weight();
+                let delta12 = (sigma1.powi(2) - sigma2.powi(2) + 4.0 * l12.powi(2)) / (8.0 * l12);
+                a[n.index()] -= 0.5 * (1.0 - 2.0 * delta12 / sigma1);
+                v[n.index()] -=
+                    0.5 * (1.0 - 3.0 * delta12 / sigma1 + 4.0 * (delta12 / sigma1).powi(3));
+            }
+        }
+
+        let component_index = Array::zeros(segments);
         let parameters = Rc::new(FusedChainParameters {
-            n_segments: n_segments.clone(),
             sigma,
-            m,
-            distance,
+            a,
+            v,
+            l,
+            component_index: component_index.clone(),
         });
         let mut contributions: Vec<Box<dyn FunctionalContribution>> = Vec::with_capacity(2);
         contributions.push(Box::new(FMTFunctional::new(&parameters, version)));
-        if n > 1 {
+        if segments > 1 {
             contributions.push(Box::new(FusedSegmentChainFunctional::new(&parameters)));
         }
-        DFT::new(
+        DFT::new_heterosegmented(
             Self {
                 parameters,
                 contributions,
                 max_eta: 0.5,
             },
-            &Array::ones(n),
-            &n_segments,
+            &component_index,
         )
     }
 
     pub fn new_monomer(sigma: f64, version: FMTVersion) -> DFT<Self> {
-        Self::new(arr1(&[sigma]), arr1(&[]), version)
+        Self::new(arr1(&[sigma]), vec![], version)
     }
 
-    pub fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, version: FMTVersion) -> DFT<Self> {
-        Self::new(arr1(&[sigma1, sigma2]), arr1(&[distance]), version)
+    pub fn new_dimer(sigma1: f64, sigma2: f64, l12: f64, version: FMTVersion) -> DFT<Self> {
+        Self::new(arr1(&[sigma1, sigma2]), vec![(0, 1, l12)], version)
     }
 
     pub fn new_trimer(
         sigma1: f64,
         sigma2: f64,
         sigma3: f64,
-        distance1: f64,
-        distance2: f64,
+        l12: f64,
+        l23: f64,
         version: FMTVersion,
     ) -> DFT<Self> {
         Self::new(
             arr1(&[sigma1, sigma2, sigma3]),
-            arr1(&[distance1, distance2]),
+            vec![(0, 1, l12), (1, 2, l23)],
             version,
         )
     }
@@ -118,12 +124,15 @@ impl FusedChainFunctional {
     pub fn new_homosegmented(
         segments: usize,
         sigma: f64,
-        distance: f64,
+        l: f64,
         version: FMTVersion,
     ) -> DFT<Self> {
         Self::new(
             Array1::from_elem(segments, sigma),
-            Array1::from_elem(segments - 1, distance),
+            (0..segments as u32 - 1)
+                .into_iter()
+                .map(|i| (i, i + 1, l))
+                .collect(),
             version,
         )
     }
@@ -135,17 +144,10 @@ impl HelmholtzEnergyFunctional for FusedChainFunctional {
     }
 
     fn compute_max_density(&self, moles: &Array1<f64>) -> f64 {
-        let mut j = 0;
-        let mut moles_segments = Array1::zeros(self.parameters.n_segments.sum());
-        for i in 0..self.parameters.n_segments.len() {
-            for _ in 0..self.parameters.n_segments[i] {
-                moles_segments[j] = moles[i];
-                j += 1
-            }
-        }
+        let moles_segments = self.parameters.component_index.mapv(|c| moles[c]);
         self.max_eta * moles.sum()
             / (FRAC_PI_6
-                * &self.parameters.m[3]
+                * &self.parameters.v
                 * self.parameters.sigma.mapv(|s| s.powi(3))
                 * moles_segments)
                 .sum()
@@ -155,21 +157,8 @@ impl HelmholtzEnergyFunctional for FusedChainFunctional {
         &self.contributions
     }
 
-    fn isaft_weight_functions(&self, _: f64) -> Vec<WeightFunction<f64>> {
-        let mut res =
-            Vec::with_capacity(self.parameters.n_segments.sum() - self.parameters.n_segments.len());
-        let mut j = 0;
-        for ns in &self.parameters.n_segments {
-            for _ in 0..ns - 1 {
-                res.push(WeightFunction::new_scaled(
-                    self.parameters.distance.clone(),
-                    WeightFunctionShape::Delta,
-                ));
-                j += 1;
-            }
-            j += 1;
-        }
-        res
+    fn bond_lengths(&self, _: f64) -> UnGraph<(), f64> {
+        self.parameters.l.clone()
     }
 }
 
@@ -192,7 +181,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
         let r = self.parameters.sigma.mapv(N::from) * 0.5;
         match self.version {
             FMTVersion::WhiteBear => {
-                WeightFunctionInfo::new(self.parameters.n_segments.clone(), false)
+                WeightFunctionInfo::new(self.parameters.component_index.clone(), false)
                     .add(
                         WeightFunction {
                             prefactor: r.mapv(|r| r.powi(-2) / (4.0 * PI)),
@@ -203,9 +192,9 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                     )
                     .add(
                         WeightFunction {
-                            prefactor: Zip::from(&self.parameters.m[1])
+                            prefactor: Zip::from(&self.parameters.a)
                                 .and(&r)
-                                .map_collect(|&m, &r| r.recip() * m / (4.0 * PI)),
+                                .map_collect(|&a, &r| r.recip() * a / (4.0 * PI)),
                             kernel_radius: r.clone(),
                             shape: WeightFunctionShape::Delta,
                         },
@@ -213,23 +202,23 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                     )
                     .add(
                         WeightFunction {
-                            prefactor: self.parameters.m[2].mapv(N::from),
-                            kernel_radius: r.clone(), // * &self.parameters.m_a.mapv(f64::sqrt),
+                            prefactor: self.parameters.a.mapv(N::from),
+                            kernel_radius: r.clone(),
                             shape: WeightFunctionShape::Delta,
                         },
                         true,
                     )
                     .add(
                         WeightFunction {
-                            prefactor: self.parameters.m[3].mapv(N::from),
-                            kernel_radius: r.clone(), // * &self.parameters.m_v.mapv(f64::cbrt),
+                            prefactor: self.parameters.v.mapv(N::from),
+                            kernel_radius: r.clone(),
                             shape: WeightFunctionShape::Theta,
                         },
                         true,
                     )
                     .add(
                         WeightFunction {
-                            prefactor: Zip::from(&self.parameters.m[3])
+                            prefactor: Zip::from(&self.parameters.v)
                                 .and(&r)
                                 .map_collect(|&m, &r| r.recip() * m / (4.0 * PI)),
                             kernel_radius: r.clone(),
@@ -239,7 +228,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                     )
                     .add(
                         WeightFunction {
-                            prefactor: self.parameters.m[3].mapv(N::from),
+                            prefactor: self.parameters.v.mapv(N::from),
                             kernel_radius: r.clone(),
                             shape: WeightFunctionShape::DeltaVec,
                         },
@@ -247,23 +236,39 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                     )
             }
             FMTVersion::KierlikRosinberg => {
-                WeightFunctionInfo::new(self.parameters.n_segments.clone(), false).extend(
-                    vec![
-                        WeightFunctionShape::KR0,
-                        WeightFunctionShape::KR1,
-                        WeightFunctionShape::Delta,
-                        WeightFunctionShape::Theta,
-                    ]
-                    .into_iter()
-                    .zip(self.parameters.m.iter())
-                    .map(|(s, m)| WeightFunction {
-                        prefactor: m.mapv(N::from),
-                        kernel_radius: r.clone(),
-                        shape: s,
-                    })
-                    .collect(),
-                    true,
-                )
+                WeightFunctionInfo::new(self.parameters.component_index.clone(), false)
+                    .add(
+                        WeightFunction {
+                            prefactor: Array::ones(r.len()),
+                            kernel_radius: r.clone(),
+                            shape: WeightFunctionShape::KR0,
+                        },
+                        true,
+                    )
+                    .add(
+                        WeightFunction {
+                            prefactor: self.parameters.a.mapv(N::from),
+                            kernel_radius: r.clone(),
+                            shape: WeightFunctionShape::KR1,
+                        },
+                        true,
+                    )
+                    .add(
+                        WeightFunction {
+                            prefactor: self.parameters.a.mapv(N::from),
+                            kernel_radius: r.clone(),
+                            shape: WeightFunctionShape::Delta,
+                        },
+                        true,
+                    )
+                    .add(
+                        WeightFunction {
+                            prefactor: self.parameters.v.mapv(N::from),
+                            kernel_radius: r.clone(),
+                            shape: WeightFunctionShape::Theta,
+                        },
+                        true,
+                    )
             }
         }
     }
@@ -335,26 +340,18 @@ impl<N: DualNum<f64> + ScalarOperand> FunctionalContributionDual<N>
 {
     fn weight_functions(&self, _: N) -> WeightFunctionInfo<N> {
         let d = self.parameters.sigma.mapv(N::from);
-        WeightFunctionInfo::new(self.parameters.n_segments.clone(), true)
+        WeightFunctionInfo::new(self.parameters.component_index.clone(), true)
             .add(
                 WeightFunction {
-                    prefactor: self.parameters.m[2].mapv(|m| m.into()) / (&d * 8.0),
+                    prefactor: self.parameters.a.mapv(N::from) / (&d * 8.0),
                     kernel_radius: d.clone(),
                     shape: WeightFunctionShape::Theta,
                 },
                 true,
             )
-            // .add(
-            //     WeightFunction {
-            //         prefactor: self.parameters.m_a.mapv(|m| (m / 24.0).into()),
-            //         kernel_radius: d.clone(),
-            //         shape: WeightFunctionShape::Delta,
-            //     },
-            //     true,
-            // )
             .add(
                 WeightFunction {
-                    prefactor: self.parameters.m[3].mapv(|m| (m / 8.0).into()),
+                    prefactor: self.parameters.v.mapv(|m| (m / 8.0).into()),
                     kernel_radius: d,
                     shape: WeightFunctionShape::Theta,
                 },
@@ -367,7 +364,6 @@ impl<N: DualNum<f64> + ScalarOperand> FunctionalContributionDual<N>
         _: N,
         weighted_densities: ArrayView2<N>,
     ) -> EosResult<Array1<N>> {
-        let p = &self.parameters;
         // number of segments
         let n = weighted_densities.shape()[0] - 2;
 
@@ -377,24 +373,21 @@ impl<N: DualNum<f64> + ScalarOperand> FunctionalContributionDual<N>
         let zeta3 = weighted_densities.index_axis(Axis(0), n + 1);
 
         let z3i = zeta3.mapv(|z3| (-z3 + 1.0).recip());
-        let mut j = 0;
-        let mut phi = Array::zeros(zeta2.raw_dim());
-        for ns in self.parameters.n_segments.iter() {
-            for _ in 0..ns - 1 {
-                // cavity correlation
-                let dij = p.sigma[j] * p.sigma[j + 1] / (p.sigma[j] + p.sigma[j + 1]);
-                let z2d = zeta2.mapv(|z2| z2 * dij);
-                let yi = &z2d * &z3i * &z3i * (z2d * &z3i * 2.0 + 3.0) + &z3i;
 
-                // Helmholtz energy density
-                let rhom = (&rho.index_axis(Axis(0), j) * p.m[1][j]
-                    + &rho.index_axis(Axis(0), j + 1) * p.m[1][j + 1])
-                    * 0.5;
-                phi = phi - yi.map(N::ln) * rhom;
-                j += 1;
+        let mut phi = Array::zeros(zeta2.raw_dim());
+        for (rho_i, i) in rho.axis_iter(Axis(0)).zip(self.parameters.l.node_indices()) {
+            let edges = self.parameters.l.edges(i);
+            let y = edges
+                .map(|e| {
+                    let z2l = zeta2.mapv(|z2| z2 * *e.weight());
+                    &z2l * &z3i * &z3i * (z2l * &z3i * 0.5 + 1.5) + &z3i
+                })
+                .reduce(|acc, y| acc * y);
+            if let Some(y) = y {
+                phi -= &(y.map(N::ln) * rho_i * 0.5);
             }
-            j += 1
         }
+
         Ok(phi)
     }
 }
@@ -408,13 +401,16 @@ impl fmt::Display for FusedSegmentChainFunctional {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eos_core::StateBuilder;
-    use eos_dft::adsorption::{AdsorptionProfile, ExternalPotential};
-    use quantity::si::{ANGSTROM, KELVIN, METER, MOL};
+    use eos_dft::adsorption::{ExternalPotential, Pore1D};
+    use eos_dft::AxisGeometry;
+    use feos_core::StateBuilder;
+    use quantity::si::{ANGSTROM, KELVIN, KILO, METER, MOL};
 
     #[test]
     fn test_fused_chain_functional() -> EosResult<()> {
-        let func = Rc::new(FusedChainFunctional::new_dimer(
+        let func = Rc::new(FusedChainFunctional::new_trimer(
+            1.0,
+            1.0,
             1.0,
             1.0,
             1.0,
@@ -422,10 +418,11 @@ mod tests {
         ));
         let bulk = StateBuilder::new(&func)
             .temperature(100.0 * KELVIN)
-            .density(0.05 * MOL / METER.powi(3))
+            .density(272.3 * KILO * MOL / METER.powi(3))
             .build()?;
-        AdsorptionProfile::new_slit_pore(
+        Pore1D::new(
             &bulk,
+            AxisGeometry::Cartesian,
             1024,
             100.0 * ANGSTROM,
             &ExternalPotential::HardWall { sigma_ss: 1.0 },

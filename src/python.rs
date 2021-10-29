@@ -1,11 +1,11 @@
-use crate::FusedChainFunctional;
+use crate::{FusedChainFunctional, FusedChainParameters};
 use ::quantity::python::*;
-use eos_core::python::{PyContributions, PyVerbosity};
-use eos_core::*;
 use eos_dft::adsorption::*;
 use eos_dft::fundamental_measure_theory::FMTVersion;
 use eos_dft::python::*;
 use eos_dft::*;
+use feos_core::python::{PyContributions, PyVerbosity};
+use feos_core::*;
 use numpy::{PyArray1, PyArray2, ToPyArray};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -148,14 +148,19 @@ impl_state!(DFT<FusedChainFunctional>, PyFusedChainFunctional);
 
 impl_adsorption_profile!(FusedChainFunctional);
 
-impl_adsorption!(FusedChainFunctional, PyFusedChainFunctional);
+impl_adsorption!(
+    FusedChainFunctional,
+    PyFusedChainFunctional,
+    FusedChainParameters
+);
 
 #[pymodule]
 pub fn fused_chain(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pymodule!(quantity))?;
     m.add_class::<PyFusedChainFunctional>()?;
     m.add_class::<PyState>()?;
-    m.add_class::<PyAdsorptionProfile>()?;
+    m.add_class::<PyGeometry>()?;
+    m.add_class::<PyPore1D>()?;
     m.add_class::<PyExternalPotential>()?;
     m.add_class::<PyAdsorption>()?;
     m.add_class::<PyDFTSolver>()?;
