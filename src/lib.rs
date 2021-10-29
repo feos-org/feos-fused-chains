@@ -34,20 +34,6 @@ pub struct FusedChainParameters {
     component_index: Array1<usize>,
 }
 
-impl FluidParameters for FusedChainParameters {
-    fn epsilon_k_ff(&self) -> Array1<f64> {
-        Array::zeros(self.sigma.len())
-    }
-
-    fn sigma_ff(&self) -> &Array1<f64> {
-        &self.sigma
-    }
-
-    fn m(&self) -> Array1<f64> {
-        Array1::ones(self.sigma.len())
-    }
-}
-
 pub struct FusedChainFunctional {
     pub parameters: Rc<FusedChainParameters>,
     contributions: Vec<Box<dyn FunctionalContribution>>,
@@ -159,6 +145,20 @@ impl HelmholtzEnergyFunctional for FusedChainFunctional {
 
     fn bond_lengths(&self, _: f64) -> UnGraph<(), f64> {
         self.parameters.l.clone()
+    }
+}
+
+impl FluidParameters for FusedChainFunctional {
+    fn epsilon_k_ff(&self) -> Array1<f64> {
+        Array::zeros(self.parameters.sigma.len())
+    }
+
+    fn sigma_ff(&self) -> &Array1<f64> {
+        &self.parameters.sigma
+    }
+
+    fn m(&self) -> Array1<f64> {
+        Array1::ones(self.parameters.sigma.len())
     }
 }
 
