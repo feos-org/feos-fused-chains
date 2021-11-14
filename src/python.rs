@@ -1,11 +1,11 @@
 use crate::FusedChainFunctional;
 use ::quantity::python::*;
-use eos_dft::adsorption::*;
-use eos_dft::fundamental_measure_theory::FMTVersion;
-use eos_dft::python::*;
-use eos_dft::*;
 use feos_core::python::{PyContributions, PyVerbosity};
 use feos_core::*;
+use feos_dft::adsorption::*;
+use feos_dft::fundamental_measure_theory::FMTVersion;
+use feos_dft::python::*;
+use feos_dft::*;
 use numpy::{PyArray1, PyArray2, PyArray4, ToPyArray};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

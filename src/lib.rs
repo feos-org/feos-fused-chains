@@ -1,11 +1,11 @@
 #![warn(clippy::all)]
-use eos_dft::adsorption::FluidParameters;
-use eos_dft::fundamental_measure_theory::FMTVersion;
-use eos_dft::{
+use feos_core::EosResult;
+use feos_dft::adsorption::FluidParameters;
+use feos_dft::fundamental_measure_theory::FMTVersion;
+use feos_dft::{
     FunctionalContribution, FunctionalContributionDual, HelmholtzEnergyFunctional, WeightFunction,
     WeightFunctionInfo, WeightFunctionShape, DFT,
 };
-use feos_core::EosResult;
 use ndarray::{arr1, Array, Array1, ArrayView2, Axis, ScalarOperand, Slice, Zip};
 use num_dual::DualNum;
 use petgraph::graph::{Graph, UnGraph};
@@ -270,6 +270,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                         true,
                     )
             }
+            FMTVersion::AntiSymWhiteBear => unimplemented!(),
         }
     }
 
@@ -298,6 +299,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                 )
             }
             FMTVersion::KierlikRosinberg => (&n1 * &n2, &n2 * &n2),
+            FMTVersion::AntiSymWhiteBear => unimplemented!(),
         };
 
         // auxiliary variables
@@ -379,7 +381,11 @@ impl<N: DualNum<f64> + ScalarOperand> FunctionalContributionDual<N>
             let edges = self.parameters.l.edges(i);
             let y = edges
                 .map(|e| {
-                    let z2l = zeta2.mapv(|z2| z2 * *e.weight());
+                    let l = e.weight();
+                    let s1 = self.parameters.sigma[e.source().index()];
+                    let s2 = self.parameters.sigma[e.target().index()];
+                    let delta = (4.0 * l.powi(2) - (s1 - s2).powi(2)) / (4.0 * l);
+                    let z2l = zeta2.mapv(|z2| z2 * delta);
                     &z2l * &z3i * &z3i * (z2l * &z3i * 0.5 + 1.5) + &z3i
                 })
                 .reduce(|acc, y| acc * y);
@@ -401,9 +407,9 @@ impl fmt::Display for FusedSegmentChainFunctional {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eos_dft::adsorption::{ExternalPotential, Pore1D};
-    use eos_dft::AxisGeometry;
     use feos_core::StateBuilder;
+    use feos_dft::adsorption::{ExternalPotential, Pore1D, PoreSpecification};
+    use feos_dft::AxisGeometry;
     use quantity::si::{ANGSTROM, KELVIN, KILO, METER, MOL};
 
     #[test]
@@ -421,14 +427,14 @@ mod tests {
             .density(272.3 * KILO * MOL / METER.powi(3))
             .build()?;
         Pore1D::new(
-            &bulk,
+            &func,
             AxisGeometry::Cartesian,
-            1024,
             100.0 * ANGSTROM,
-            &ExternalPotential::HardWall { sigma_ss: 1.0 },
-            &func.functional.parameters,
+            ExternalPotential::HardWall { sigma_ss: 1.0 },
+            Some(1024),
             None,
-        )?
+        )
+        .initialize(&bulk, None)?
         .solve(None)?;
         Ok(())
     }
