@@ -11,7 +11,7 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 quantity = "0.3"
 feos-core = { git = "https://github.com/feos-org/feos-core", branch = "main" }
-eos-dft = { path = "../../../Code/eos/eos-dft" }
+feos-dft = { git = "https://github.com/feos-org/feos-dft", branch = "main" }
 num-dual = "0.3"
 ndarray = { version = "0.15", features = ["serde"] }
 numpy = { version = "0.14", optional = true }
@@ -25,7 +25,7 @@ optional = true
 
 [features]
 default = []
-python = ["pyo3", "numpy", "eos-dft/python"]
+python = ["pyo3", "numpy", "feos-dft/python"]
 openblas-system = ["feos-core/openblas-system"]
 openblas-static = ["feos-core/openblas-static"]
 intel-mkl-system = ["feos-core/intel-mkl-system"]
