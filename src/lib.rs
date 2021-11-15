@@ -10,7 +10,6 @@ use ndarray::{arr1, Array, Array1, ArrayView2, Axis, ScalarOperand, Slice, Zip};
 use num_dual::DualNum;
 use petgraph::graph::{Graph, UnGraph};
 use petgraph::visit::EdgeRef;
-use serde::{Deserialize, Serialize};
 use std::f64::consts::{FRAC_PI_6, PI};
 use std::fmt;
 use std::rc::Rc;
@@ -20,11 +19,6 @@ mod python;
 
 const PI36M1: f64 = 1.0 / (36.0 * PI);
 const N3_CUTOFF: f64 = 1e-5;
-
-#[derive(Clone, Default, Serialize, Deserialize)]
-pub struct FusedChainRecord {
-    sigma: f64,
-}
 
 pub struct FusedChainParameters {
     sigma: Array1<f64>,
