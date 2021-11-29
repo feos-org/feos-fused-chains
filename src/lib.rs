@@ -35,7 +35,11 @@ pub struct FusedChainFunctional {
 }
 
 impl FusedChainFunctional {
-    fn new(sigma: Array1<f64>, bonds: Vec<(u32, u32, f64)>, version: FMTVersion) -> DFT<Self> {
+    fn new(
+        sigma: Array1<f64>,
+        bonds: Vec<(u32, u32, f64)>,
+        version: Option<FMTVersion>,
+    ) -> DFT<Self> {
         let segments = sigma.len();
 
         let mut l = Graph::default();
@@ -78,11 +82,11 @@ impl FusedChainFunctional {
         )
     }
 
-    pub fn new_monomer(sigma: f64, version: FMTVersion) -> DFT<Self> {
+    pub fn new_monomer(sigma: f64, version: Option<FMTVersion>) -> DFT<Self> {
         Self::new(arr1(&[sigma]), vec![], version)
     }
 
-    pub fn new_dimer(sigma1: f64, sigma2: f64, l12: f64, version: FMTVersion) -> DFT<Self> {
+    pub fn new_dimer(sigma1: f64, sigma2: f64, l12: f64, version: Option<FMTVersion>) -> DFT<Self> {
         Self::new(arr1(&[sigma1, sigma2]), vec![(0, 1, l12)], version)
     }
 
@@ -92,7 +96,7 @@ impl FusedChainFunctional {
         sigma3: f64,
         l12: f64,
         l23: f64,
-        version: FMTVersion,
+        version: Option<FMTVersion>,
     ) -> DFT<Self> {
         Self::new(
             arr1(&[sigma1, sigma2, sigma3]),
@@ -105,7 +109,7 @@ impl FusedChainFunctional {
         segments: usize,
         sigma: f64,
         l: f64,
-        version: FMTVersion,
+        version: Option<FMTVersion>,
     ) -> DFT<Self> {
         Self::new(
             Array1::from_elem(segments, sigma),
@@ -162,10 +166,10 @@ struct FMTFunctional {
 }
 
 impl FMTFunctional {
-    fn new(parameters: &Rc<FusedChainParameters>, version: FMTVersion) -> Self {
+    fn new(parameters: &Rc<FusedChainParameters>, version: Option<FMTVersion>) -> Self {
         Self {
             parameters: parameters.clone(),
-            version,
+            version: version.unwrap_or(FMTVersion::WhiteBear),
         }
     }
 }
@@ -174,7 +178,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
     fn weight_functions(&self, _: N) -> WeightFunctionInfo<N> {
         let r = self.parameters.sigma.mapv(N::from) * 0.5;
         match self.version {
-            FMTVersion::WhiteBear => {
+            FMTVersion::WhiteBear | FMTVersion::AntiSymWhiteBear => {
                 WeightFunctionInfo::new(self.parameters.component_index.clone(), false)
                     .add(
                         WeightFunction {
@@ -264,7 +268,6 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                         true,
                     )
             }
-            FMTVersion::AntiSymWhiteBear => unimplemented!(),
         }
     }
 
@@ -409,12 +412,7 @@ mod tests {
     #[test]
     fn test_fused_chain_functional() -> EosResult<()> {
         let func = Rc::new(FusedChainFunctional::new_trimer(
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            FMTVersion::WhiteBear,
+            1.0, 1.0, 1.0, 1.0, 1.0, None,
         ));
         let bulk = StateBuilder::new(&func)
             .temperature(100.0 * KELVIN)

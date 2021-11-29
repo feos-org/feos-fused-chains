@@ -3,7 +3,6 @@ use ::quantity::python::*;
 use feos_core::python::{PyContributions, PyVerbosity};
 use feos_core::*;
 use feos_dft::adsorption::*;
-use feos_dft::fundamental_measure_theory::FMTVersion;
 use feos_dft::python::*;
 use feos_dft::*;
 use numpy::{PyArray1, PyArray2, PyArray4, ToPyArray};
@@ -26,20 +25,20 @@ impl PyFusedChainFunctional {
     /// ----------
     /// sigma: float
     ///     Diameter of the monomer.
+    /// version: FMTVersion, optional
+    ///     The specific version of FMT to be used.
+    ///     Defaults to FMTVersion.WhiteBear
     ///
     /// Returns
     /// -------
     /// FusedChainFunctional
     #[staticmethod]
-    #[pyo3(text_signature = "(sigma)")]
-    fn new_monomer(sigma: f64, kierlik_rosinberg: Option<bool>) -> Self {
-        let mut version = FMTVersion::WhiteBear;
-        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
-            if kierlik_rosinberg {
-                version = FMTVersion::KierlikRosinberg;
-            }
-        }
-        Self(Rc::new(FusedChainFunctional::new_monomer(sigma, version)))
+    #[pyo3(text_signature = "(sigma, version=None)")]
+    fn new_monomer(sigma: f64, version: Option<PyFMTVersion>) -> Self {
+        Self(Rc::new(FusedChainFunctional::new_monomer(
+            sigma,
+            version.map(|v| v.0),
+        )))
     }
 
     /// New functional for fused dimers.
@@ -52,21 +51,21 @@ impl PyFusedChainFunctional {
     ///     Diameter of the second segment.
     /// distance: float
     ///     Distance between the centers of the two segments.
+    /// version: FMTVersion, optional
+    ///     The specific version of FMT to be used.
+    ///     Defaults to FMTVersion.WhiteBear
     ///
     /// Returns
     /// -------
     /// FusedChainFunctional
     #[staticmethod]
-    #[pyo3(text_signature = "(sigma1, sigma2, distance)")]
-    fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, kierlik_rosinberg: Option<bool>) -> Self {
-        let mut version = FMTVersion::WhiteBear;
-        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
-            if kierlik_rosinberg {
-                version = FMTVersion::KierlikRosinberg;
-            }
-        }
+    #[pyo3(text_signature = "(sigma1, sigma2, distance, version=None)")]
+    fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, version: Option<PyFMTVersion>) -> Self {
         Self(Rc::new(FusedChainFunctional::new_dimer(
-            sigma1, sigma2, distance, version,
+            sigma1,
+            sigma2,
+            distance,
+            version.map(|v| v.0),
         )))
     }
 
@@ -84,28 +83,30 @@ impl PyFusedChainFunctional {
     ///     Distance between the centers of the first segments.
     /// distance2: float
     ///     Distance between the centers of the last segments.
+    /// version: FMTVersion, optional
+    ///     The specific version of FMT to be used.
+    ///     Defaults to FMTVersion.WhiteBear
     ///
     /// Returns
     /// -------
     /// FusedChainFunctional
     #[staticmethod]
-    #[pyo3(text_signature = "(sigma1, sigma2, sigma3, distance1, distance2)")]
+    #[pyo3(text_signature = "(sigma1, sigma2, sigma3, distance1, distance2, version=None)")]
     fn new_trimer(
         sigma1: f64,
         sigma2: f64,
         sigma3: f64,
         distance1: f64,
         distance2: f64,
-        kierlik_rosinberg: Option<bool>,
+        version: Option<PyFMTVersion>,
     ) -> Self {
-        let mut version = FMTVersion::WhiteBear;
-        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
-            if kierlik_rosinberg {
-                version = FMTVersion::KierlikRosinberg;
-            }
-        }
         Self(Rc::new(FusedChainFunctional::new_trimer(
-            sigma1, sigma2, sigma3, distance1, distance2, version,
+            sigma1,
+            sigma2,
+            sigma3,
+            distance1,
+            distance2,
+            version.map(|v| v.0),
         )))
     }
 
@@ -119,26 +120,26 @@ impl PyFusedChainFunctional {
     ///     Diameter of the first segment.
     /// distance: float
     ///     Distance between the centers of the first segments.
+    /// version: FMTVersion, optional
+    ///     The specific version of FMT to be used.
+    ///     Defaults to FMTVersion.WhiteBear
     ///
     /// Returns
     /// -------
     /// FusedChainFunctional
     #[staticmethod]
-    #[pyo3(text_signature = "(segments, sigma, distance)")]
+    #[pyo3(text_signature = "(segments, sigma, distance, version=None)")]
     fn new_homosegmented(
         segments: usize,
         sigma: f64,
         distance: f64,
-        kierlik_rosinberg: Option<bool>,
+        version: Option<PyFMTVersion>,
     ) -> Self {
-        let mut version = FMTVersion::WhiteBear;
-        if let Some(kierlik_rosinberg) = kierlik_rosinberg {
-            if kierlik_rosinberg {
-                version = FMTVersion::KierlikRosinberg;
-            }
-        }
         Self(Rc::new(FusedChainFunctional::new_homosegmented(
-            segments, sigma, distance, version,
+            segments,
+            sigma,
+            distance,
+            version.map(|v| v.0),
         )))
     }
 }
@@ -161,6 +162,7 @@ pub fn fused_chain(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyAdsorption1D>()?;
     m.add_class::<PyDFTSolver>()?;
     m.add_class::<PyContributions>()?;
+    m.add_class::<PyFMTVersion>()?;
 
     py.run(
         "import sys; sys.modules['fused_chain.si'] = quantity",
