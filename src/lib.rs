@@ -37,6 +37,7 @@ pub struct FusedChainFunctional {
 impl FusedChainFunctional {
     fn new(
         sigma: Array1<f64>,
+        component_index: Array1<usize>,
         bonds: Vec<(u32, u32, f64)>,
         version: Option<FMTVersion>,
     ) -> DFT<Self> {
@@ -59,7 +60,6 @@ impl FusedChainFunctional {
             }
         }
 
-        let component_index = Array::zeros(segments);
         let parameters = Rc::new(FusedChainParameters {
             sigma,
             a,
@@ -83,11 +83,16 @@ impl FusedChainFunctional {
     }
 
     pub fn new_monomer(sigma: f64, version: Option<FMTVersion>) -> DFT<Self> {
-        Self::new(arr1(&[sigma]), vec![], version)
+        Self::new(arr1(&[sigma]), arr1(&[0]), vec![], version)
     }
 
     pub fn new_dimer(sigma1: f64, sigma2: f64, l12: f64, version: Option<FMTVersion>) -> DFT<Self> {
-        Self::new(arr1(&[sigma1, sigma2]), vec![(0, 1, l12)], version)
+        Self::new(
+            arr1(&[sigma1, sigma2]),
+            arr1(&[0, 0]),
+            vec![(0, 1, l12)],
+            version,
+        )
     }
 
     pub fn new_trimer(
@@ -100,6 +105,7 @@ impl FusedChainFunctional {
     ) -> DFT<Self> {
         Self::new(
             arr1(&[sigma1, sigma2, sigma3]),
+            arr1(&[0, 0, 0]),
             vec![(0, 1, l12), (1, 2, l23)],
             version,
         )
@@ -113,6 +119,7 @@ impl FusedChainFunctional {
     ) -> DFT<Self> {
         Self::new(
             Array1::from_elem(segments, sigma),
+            Array1::from_elem(segments, 0),
             (0..segments as u32 - 1)
                 .into_iter()
                 .map(|i| (i, i + 1, l))

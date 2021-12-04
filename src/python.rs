@@ -13,12 +13,45 @@ use quantity::si::*;
 use std::rc::Rc;
 
 /// Helmholtz energy functional for fused chains.
+///
+/// Parameters
+/// ----------
+/// sigma: numpy.ndarray[float]
+///     Segment diameters.
+/// component_index: numpy.ndarray[int]
+///     Index of the component that each individual
+///     segment is on.
+/// bonds: [(int, int, float)]
+///     List of bonds and corresponding bond lengths.
+/// version: FMTVersion, optional
+///     The specific version of FMT to be used.
+///     Defaults to FMTVersion.WhiteBear
+///
+/// Returns
+/// -------
+/// FusedChainFunctional
 #[pyclass(name = "FusedChainFunctional", unsendable)]
+#[pyo3(text_signature = "(sigma, component_index, bonds, version=None)")]
 #[derive(Clone)]
 pub struct PyFusedChainFunctional(Rc<DFT<FusedChainFunctional>>);
 
 #[pymethods]
 impl PyFusedChainFunctional {
+    #[new]
+    fn new(
+        sigma: &PyArray1<f64>,
+        component_index: &PyArray1<usize>,
+        bonds: Vec<(u32, u32, f64)>,
+        version: Option<PyFMTVersion>,
+    ) -> Self {
+        Self(Rc::new(FusedChainFunctional::new(
+            sigma.to_owned_array(),
+            component_index.to_owned_array(),
+            bonds,
+            version.map(|v| v.0),
+        )))
+    }
+
     /// New functional for monomers.
     ///
     /// Parameters
