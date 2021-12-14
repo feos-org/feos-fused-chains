@@ -225,7 +225,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                         WeightFunction {
                             prefactor: Zip::from(&self.parameters.v)
                                 .and(&r)
-                                .map_collect(|&m, &r| r.recip() * m / (4.0 * PI)),
+                                .map_collect(|&v, &r| r.recip() * v / (4.0 * PI)),
                             kernel_radius: r.clone(),
                             shape: WeightFunctionShape::DeltaVec,
                         },
@@ -293,17 +293,31 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
         let n3 = weighted_densities.index_axis(Axis(0), 3);
 
         let (n1n2, n2n2) = match self.version {
-            FMTVersion::WhiteBear => {
+            FMTVersion::WhiteBear | FMTVersion::AntiSymWhiteBear => {
                 let n1v = weighted_densities.slice_axis(Axis(0), Slice::new(4, Some(4 + dim), 1));
                 let n2v = weighted_densities
                     .slice_axis(Axis(0), Slice::new(4 + dim, Some(4 + 2 * dim), 1));
-                (
-                    &n1 * &n2 - (&n1v * &n2v).sum_axis(Axis(0)),
-                    &n2 * &n2 - (&n2v * &n2v).sum_axis(Axis(0)) * 3.0,
-                )
+                match self.version {
+                    FMTVersion::WhiteBear => (
+                        &n1 * &n2 - (&n1v * &n2v).sum_axis(Axis(0)),
+                        &n2 * &n2 - (&n2v * &n2v).sum_axis(Axis(0)) * 3.0,
+                    ),
+                    FMTVersion::AntiSymWhiteBear => {
+                        let mut xi2 = (&n2v * &n2v).sum_axis(Axis(0)) / n2.map(|n| n.powi(2));
+                        xi2.iter_mut().for_each(|x| {
+                            if x.re() > 1.0 {
+                                *x = N::one()
+                            }
+                        });
+                        (
+                            &n1 * &n2 - (&n1v * &n2v).sum_axis(Axis(0)),
+                            &n2 * &n2 * xi2.mapv(|x| (-x + 1.0).powi(3)),
+                        )
+                    }
+                    FMTVersion::KierlikRosinberg => unreachable!(),
+                }
             }
             FMTVersion::KierlikRosinberg => (&n1 * &n2, &n2 * &n2),
-            FMTVersion::AntiSymWhiteBear => unimplemented!(),
         };
 
         // auxiliary variables
