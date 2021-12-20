@@ -6,7 +6,7 @@ use feos_dft::{
     FunctionalContribution, FunctionalContributionDual, HelmholtzEnergyFunctional, WeightFunction,
     WeightFunctionInfo, WeightFunctionShape, DFT,
 };
-use ndarray::{arr1, Array, Array1, ArrayView2, Axis, ScalarOperand, Slice, Zip};
+use ndarray::{arr1, Array1, ArrayView2, Axis, ScalarOperand, Slice, Zip};
 use num_dual::DualNum;
 use petgraph::graph::{Graph, UnGraph};
 use petgraph::visit::EdgeRef;
@@ -19,6 +19,18 @@ mod python;
 
 const PI36M1: f64 = 1.0 / (36.0 * PI);
 const N3_CUTOFF: f64 = 1e-5;
+
+#[derive(Clone)]
+pub struct FusedChainRecord {
+    sigma: Array1<f64>,
+    bonds: Vec<(u32, u32, f64)>,
+}
+
+impl FusedChainRecord {
+    pub fn new(sigma: Array1<f64>, bonds: Vec<(u32, u32, f64)>) -> Self {
+        Self { sigma, bonds }
+    }
+}
 
 pub struct FusedChainParameters {
     sigma: Array1<f64>,
@@ -46,8 +58,8 @@ impl FusedChainFunctional {
         let mut l = Graph::default();
         l.extend_with_edges(bonds.into_iter());
 
-        let mut a = Array::ones(segments);
-        let mut v = Array::ones(segments);
+        let mut a = Array1::ones(segments);
+        let mut v = Array1::ones(segments);
         for n in l.node_indices() {
             let sigma1 = sigma[n.index()];
             for e in l.edges(n) {
@@ -79,6 +91,32 @@ impl FusedChainFunctional {
                 max_eta: 0.5,
             },
             &component_index,
+        )
+    }
+
+    pub fn from_records(records: Vec<FusedChainRecord>, version: Option<FMTVersion>) -> DFT<Self> {
+        let mut sigma = Vec::new();
+        let mut component_index = Vec::new();
+        let mut bonds = Vec::new();
+        let mut segments = 0;
+
+        for (i, record) in records.into_iter().enumerate() {
+            let FusedChainRecord { sigma: s, bonds: b } = record;
+            let len = s.len();
+            sigma.extend(s);
+            component_index.extend(vec![i; len]);
+            bonds.extend(
+                b.into_iter()
+                    .map(|(i, j, l)| (i + segments, j + segments, l)),
+            );
+            segments += len as u32;
+        }
+
+        Self::new(
+            Array1::from_vec(sigma),
+            Array1::from_vec(component_index),
+            bonds,
+            version,
         )
     }
 
@@ -155,7 +193,7 @@ impl HelmholtzEnergyFunctional for FusedChainFunctional {
 
 impl FluidParameters for FusedChainFunctional {
     fn epsilon_k_ff(&self) -> Array1<f64> {
-        Array::zeros(self.parameters.sigma.len())
+        Array1::zeros(self.parameters.sigma.len())
     }
 
     fn sigma_ff(&self) -> &Array1<f64> {
@@ -244,7 +282,7 @@ impl<N: DualNum<f64>> FunctionalContributionDual<N> for FMTFunctional {
                 WeightFunctionInfo::new(self.parameters.component_index.clone(), false)
                     .add(
                         WeightFunction {
-                            prefactor: Array::ones(r.len()),
+                            prefactor: Array1::ones(r.len()),
                             kernel_radius: r.clone(),
                             shape: WeightFunctionShape::KR0,
                         },
@@ -394,7 +432,7 @@ impl<N: DualNum<f64> + ScalarOperand> FunctionalContributionDual<N>
 
         let z3i = zeta3.mapv(|z3| (-z3 + 1.0).recip());
 
-        let mut phi = Array::zeros(zeta2.raw_dim());
+        let mut phi = Array1::zeros(zeta2.raw_dim());
         for (rho_i, i) in rho.axis_iter(Axis(0)).zip(self.parameters.l.node_indices()) {
             let edges = self.parameters.l.edges(i);
             let y = edges
@@ -402,8 +440,8 @@ impl<N: DualNum<f64> + ScalarOperand> FunctionalContributionDual<N>
                     let l = e.weight();
                     let s1 = self.parameters.sigma[e.source().index()];
                     let s2 = self.parameters.sigma[e.target().index()];
-                    let delta = (4.0 * l.powi(2) - (s1 - s2).powi(2)) / (4.0 * l);
-                    let z2l = zeta2.mapv(|z2| z2 * delta);
+                    let b = (4.0 * l.powi(2) - (s1 - s2).powi(2)) / (4.0 * l);
+                    let z2l = zeta2.mapv(|z2| z2 * b);
                     &z2l * &z3i * &z3i * (z2l * &z3i * 0.5 + 1.5) + &z3i
                 })
                 .reduce(|acc, y| acc * y);

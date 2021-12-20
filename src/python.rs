@@ -1,4 +1,4 @@
-use crate::FusedChainFunctional;
+use crate::{FusedChainFunctional, FusedChainRecord};
 use ::quantity::python::*;
 use feos_core::python::{PyContributions, PyVerbosity};
 use feos_core::*;
@@ -11,6 +11,31 @@ use pyo3::prelude::*;
 use pyo3::wrap_pymodule;
 use quantity::si::*;
 use std::rc::Rc;
+
+/// Parameters for a single fused-chain molecule.
+///
+/// Parameters
+/// ----------
+/// sigma: numpy.ndarray[float]
+///     Segment diameters.
+/// bonds: [(int, int, float)]
+///     List of bonds and corresponding bond lengths.
+///
+/// Returns
+/// -------
+/// FusedChainRecord
+#[pyclass(name = "FusedChainRecord", unsendable)]
+#[pyo3(text_signature = "(sigma, bonds)")]
+#[derive(Clone)]
+pub struct PyFusedChainRecord(FusedChainRecord);
+
+#[pymethods]
+impl PyFusedChainRecord {
+    #[new]
+    fn new(sigma: &PyArray1<f64>, bonds: Vec<(u32, u32, f64)>) -> Self {
+        Self(FusedChainRecord::new(sigma.to_owned_array(), bonds))
+    }
+}
 
 /// Helmholtz energy functional for fused chains.
 ///
@@ -48,6 +73,28 @@ impl PyFusedChainFunctional {
             sigma.to_owned_array(),
             component_index.to_owned_array(),
             bonds,
+            version.map(|v| v.0),
+        )))
+    }
+
+    /// Create a fused-chain Helmholtz energy functional from records.
+    ///
+    /// Parameters
+    /// ----------
+    /// records: [FusedChainRecords]
+    ///     Pure component records.
+    /// version: FMTVersion, optional
+    ///     The specific version of FMT to be used.
+    ///     Defaults to FMTVersion.WhiteBear
+    ///
+    /// Returns
+    /// -------
+    /// FusedChainFunctional
+    #[staticmethod]
+    #[pyo3(text_signature = "(records, version=None)")]
+    fn from_records(records: Vec<PyFusedChainRecord>, version: Option<PyFMTVersion>) -> Self {
+        Self(Rc::new(FusedChainFunctional::from_records(
+            records.into_iter().map(|r| r.0).collect(),
             version.map(|v| v.0),
         )))
     }
@@ -188,6 +235,7 @@ impl_adsorption!(FusedChainFunctional, PyFusedChainFunctional);
 pub fn fused_chain(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pymodule!(quantity))?;
     m.add_class::<PyFusedChainFunctional>()?;
+    m.add_class::<PyFusedChainRecord>()?;
     m.add_class::<PyState>()?;
     m.add_class::<PyGeometry>()?;
     m.add_class::<PyPore1D>()?;
