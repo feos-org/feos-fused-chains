@@ -6,14 +6,15 @@ The development of the model is presented in a manuscript submitted to Physical 
 
 ## Installation
 
+### Rust
+
 Add this to your `Cargo.toml`
 
 ```toml
 [dependencies]
 feos-fused-chains = "0.1"
 ```
-
-## Building python wheel
+### Python
 
 From within a Python virtual environment with `maturin` installed, type
 ```
