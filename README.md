@@ -24,6 +24,10 @@ to build the wheel. To directly install the package into the virtual environment
 ```
 maturin develop --release
 ```
+The package can also be directly installed (needs the Rust compiler and maturin) with
+```
+pip install git+https://github.com/feos-org/feos-fused-chains
+```
 
 ## Example
 
