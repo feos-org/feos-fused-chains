@@ -38,23 +38,6 @@ impl PyFusedChainRecord {
 }
 
 /// Helmholtz energy functional for fused chains.
-///
-/// Parameters
-/// ----------
-/// sigma: numpy.ndarray[float]
-///     Segment diameters.
-/// component_index: numpy.ndarray[int]
-///     Index of the component that each individual
-///     segment is on.
-/// bonds: [(int, int, float)]
-///     List of bonds and corresponding bond lengths.
-/// version: FMTVersion, optional
-///     The specific version of FMT to be used.
-///     Defaults to FMTVersion.WhiteBear
-///
-/// Returns
-/// -------
-/// FusedChainFunctional
 #[pyclass(name = "FusedChainFunctional", unsendable)]
 #[pyo3(text_signature = "(sigma, component_index, bonds, version=None)")]
 #[derive(Clone)]
@@ -62,21 +45,6 @@ pub struct PyFusedChainFunctional(Rc<DFT<FusedChainFunctional>>);
 
 #[pymethods]
 impl PyFusedChainFunctional {
-    #[new]
-    fn new(
-        sigma: &PyArray1<f64>,
-        component_index: &PyArray1<usize>,
-        bonds: Vec<(u32, u32, f64)>,
-        version: Option<PyFMTVersion>,
-    ) -> Self {
-        Self(Rc::new(FusedChainFunctional::new(
-            sigma.to_owned_array(),
-            component_index.to_owned_array(),
-            bonds,
-            version.map(|v| v.0),
-        )))
-    }
-
     /// Create a fused-chain Helmholtz energy functional from records.
     ///
     /// Parameters
@@ -129,8 +97,8 @@ impl PyFusedChainFunctional {
     ///     Diameter of the first segment.
     /// sigma2: float
     ///     Diameter of the second segment.
-    /// distance: float
-    ///     Distance between the centers of the two segments.
+    /// l12: float
+    ///     Bond length between the two segments.
     /// version: FMTVersion, optional
     ///     The specific version of FMT to be used.
     ///     Defaults to FMTVersion.WhiteBear
@@ -139,12 +107,12 @@ impl PyFusedChainFunctional {
     /// -------
     /// FusedChainFunctional
     #[staticmethod]
-    #[pyo3(text_signature = "(sigma1, sigma2, distance, version=None)")]
-    fn new_dimer(sigma1: f64, sigma2: f64, distance: f64, version: Option<PyFMTVersion>) -> Self {
+    #[pyo3(text_signature = "(sigma1, sigma2, l12, version=None)")]
+    fn new_dimer(sigma1: f64, sigma2: f64, l12: f64, version: Option<PyFMTVersion>) -> Self {
         Self(Rc::new(FusedChainFunctional::new_dimer(
             sigma1,
             sigma2,
-            distance,
+            l12,
             version.map(|v| v.0),
         )))
     }
@@ -159,10 +127,10 @@ impl PyFusedChainFunctional {
     ///     Diameter of the second segment.
     /// sigma3: float
     ///     Diameter of the third segment.
-    /// distance1: float
-    ///     Distance between the centers of the first segments.
-    /// distance2: float
-    ///     Distance between the centers of the last segments.
+    /// l12: float
+    ///     Bond length between the first segments.
+    /// l23: float
+    ///     Bond length between the last segments.
     /// version: FMTVersion, optional
     ///     The specific version of FMT to be used.
     ///     Defaults to FMTVersion.WhiteBear
@@ -171,21 +139,21 @@ impl PyFusedChainFunctional {
     /// -------
     /// FusedChainFunctional
     #[staticmethod]
-    #[pyo3(text_signature = "(sigma1, sigma2, sigma3, distance1, distance2, version=None)")]
+    #[pyo3(text_signature = "(sigma1, sigma2, sigma3, l12, l23, version=None)")]
     fn new_trimer(
         sigma1: f64,
         sigma2: f64,
         sigma3: f64,
-        distance1: f64,
-        distance2: f64,
+        l12: f64,
+        l23: f64,
         version: Option<PyFMTVersion>,
     ) -> Self {
         Self(Rc::new(FusedChainFunctional::new_trimer(
             sigma1,
             sigma2,
             sigma3,
-            distance1,
-            distance2,
+            l12,
+            l23,
             version.map(|v| v.0),
         )))
     }
@@ -197,9 +165,9 @@ impl PyFusedChainFunctional {
     /// segments: int
     ///     NUmber of segments on the chain.
     /// sigma: float
-    ///     Diameter of the first segment.
-    /// distance: float
-    ///     Distance between the centers of the first segments.
+    ///     Diameter of the segments.
+    /// l: float
+    ///     Bond length of the chain.
     /// version: FMTVersion, optional
     ///     The specific version of FMT to be used.
     ///     Defaults to FMTVersion.WhiteBear
@@ -208,17 +176,17 @@ impl PyFusedChainFunctional {
     /// -------
     /// FusedChainFunctional
     #[staticmethod]
-    #[pyo3(text_signature = "(segments, sigma, distance, version=None)")]
+    #[pyo3(text_signature = "(segments, sigma, l, version=None)")]
     fn new_homosegmented(
         segments: usize,
         sigma: f64,
-        distance: f64,
+        l: f64,
         version: Option<PyFMTVersion>,
     ) -> Self {
         Self(Rc::new(FusedChainFunctional::new_homosegmented(
             segments,
             sigma,
-            distance,
+            l,
             version.map(|v| v.0),
         )))
     }
@@ -232,7 +200,7 @@ impl_pore!(FusedChainFunctional, PyFusedChainFunctional);
 impl_adsorption!(FusedChainFunctional, PyFusedChainFunctional);
 
 #[pymodule]
-pub fn fused_chain(py: Python<'_>, m: &PyModule) -> PyResult<()> {
+pub fn feos_fused_chains(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pymodule!(quantity))?;
     m.add_class::<PyFusedChainFunctional>()?;
     m.add_class::<PyFusedChainRecord>()?;
@@ -246,7 +214,7 @@ pub fn fused_chain(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyFMTVersion>()?;
 
     py.run(
-        "import sys; sys.modules['fused_chain.si'] = quantity",
+        "import sys; sys.modules['feos_fused_chains.si'] = quantity",
         None,
         Some(m.dict()),
     )

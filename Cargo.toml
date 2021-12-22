@@ -1,11 +1,16 @@
 [package]
-name = "fused-chain"
+name = "feos-fused-chains"
 version = "0.1.0"
-authors = ["Philipp Rehner <rehner@itt.uni-stuttgart.de>"]
+authors = ["Philipp Rehner <prehner@ethz.ch>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
+description = "Fused-chain Helmholtz energy functional implemented in the `feos` framework."
+homepage = "https://github.com/feos-org"
+readme = "README.md"
+repository = "https://github.com/feos-org/feos-fused-chains"
 
 [lib]
-name = "fused_chain"
+name = "feos_fused_chains"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
