@@ -190,6 +190,20 @@ impl PyFusedChainFunctional {
             version.map(|v| v.0),
         )))
     }
+
+    /// Calculate the packing fraction for the given partial densities.
+    ///
+    /// Parameters
+    /// ----------
+    /// partial_density: SIArray1
+    ///     Partial densities of al components.
+    ///
+    /// Returns
+    /// -------
+    /// float
+    fn packing_fraction(&self, partial_density: &PySIArray1) -> EosResult<f64> {
+        self.0.functional.packing_fraction(partial_density)
+    }
 }
 
 impl_equation_of_state!(PyFusedChainFunctional);

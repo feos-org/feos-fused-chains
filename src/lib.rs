@@ -1,5 +1,6 @@
 #![warn(clippy::all)]
 use feos_core::EosResult;
+use feos_core::EosUnit;
 use feos_dft::adsorption::FluidParameters;
 use feos_dft::fundamental_measure_theory::FMTVersion;
 use feos_dft::{
@@ -10,6 +11,7 @@ use ndarray::{arr1, Array1, ArrayView2, Axis, ScalarOperand, Slice, Zip};
 use num_dual::DualNum;
 use petgraph::graph::{Graph, UnGraph};
 use petgraph::visit::EdgeRef;
+use quantity::QuantityArray1;
 use std::f64::consts::{FRAC_PI_6, PI};
 use std::fmt;
 use std::rc::Rc;
@@ -164,6 +166,15 @@ impl FusedChainFunctional {
                 .collect(),
             version,
         )
+    }
+
+    pub fn packing_fraction<U: EosUnit>(
+        &self,
+        partial_density: &QuantityArray1<U>,
+    ) -> EosResult<f64> {
+        let p = &self.parameters;
+        let rho = partial_density.to_reduced(U::reference_density())?;
+        Ok((rho * &p.v * &p.sigma * &p.sigma * &p.sigma).sum() * FRAC_PI_6)
     }
 }
 
@@ -478,7 +489,6 @@ mod tests {
             .density(272.3 * KILO * MOL / METER.powi(3))
             .build()?;
         Pore1D::new(
-            &func,
             AxisGeometry::Cartesian,
             100.0 * ANGSTROM,
             ExternalPotential::HardWall { sigma_ss: 1.0 },
