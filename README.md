@@ -2,7 +2,10 @@
 
 Fused-chain Helmholtz energy functional implemented in the `feos` framework.
 
-The development of the model is presented in a manuscript submitted to Physical Review E.
+For details on the development of the model, check out our publication:
+> [Philipp Rehner, Thijs van Westen, and Joachim Gross.\
+**Equation of state and Helmholtz energy functional for fused heterosegmented hard chains.**\
+*Physical Review E* 105:034110, 2022](https://doi.org/10.1103/PhysRevE.105.034110)
 
 ## Installation
 
